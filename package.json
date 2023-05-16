@@ -1,0 +1,17 @@
+{
+  "name": "http-security-header-auditor",
+  "version": "0.0.0",
+  "description": "Check security headers against a declared policy and route exceptions.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/edilec/http-security-header-auditor"
+  }
+}
