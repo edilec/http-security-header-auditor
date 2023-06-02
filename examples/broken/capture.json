@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1",
+  "label": "production capture, exported by hand",
+  "routes": [
+    {
+      "id": "app-root",
+      "description": "Document response for the signed-in shell.",
+      "headers": [
+        { "name": "Content-Security-Policy", "value": "default-src 'none' https://cdn.example.invalid; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' 'nonce-r4nd0mv4lu3'; img-src * https://images.example.invalid; img-src 'self'" },
+        { "name": "Strict-Transport-Security", "value": "max-age=300" },
+        { "name": "Referrer-Policy", "value": "unsafe-url" },
+        { "name": "X-Powered-By", "value": "Express" }
+      ]
+    },
+    {
+      "id": "legacy-report-viewer",
+      "description": "Old reporting UI; the rollout never finished.",
+      "headers": [
+        { "name": "Content-Security-Policy-Report-Only", "value": "default-src 'self'; report-uri /csp-reports" },
+        { "name": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
+        { "name": "X-Content-Type-Options", "value": "nosniff" },
+        { "name": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1",
+  "label": "public web baseline",
+  "required": [
+    {
+      "header": "content-security-policy",
+      "requiredDirectives": ["default-src"],
+      "forbiddenSources": ["'unsafe-eval'", "'unsafe-inline'", "*"]
+    },
+    {
+      "header": "x-content-type-options",
+      "allowedValues": ["nosniff"]
+    }
+  ],
+  "forbidden": [],
+  "exceptions": []
+}

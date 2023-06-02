@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1",
+  "label": "public web baseline",
+  "required": [
+    {
+      "header": "content-security-policy",
+      "description": "Enforcing policy. The report-only field never satisfies this entry.",
+      "requiredDirectives": ["base-uri", "default-src", "frame-ancestors", "object-src"],
+      "forbiddenSources": ["'unsafe-eval'", "'unsafe-inline'", "*"]
+    },
+    {
+      "header": "strict-transport-security",
+      "description": "Two years, subdomains included.",
+      "minMaxAge": 31536000,
+      "requireIncludeSubDomains": true
+    },
+    {
+      "header": "x-content-type-options",
+      "allowedValues": ["nosniff"]
+    },
+    {
+      "header": "referrer-policy",
+      "allowedValues": ["no-referrer", "strict-origin-when-cross-origin"]
+    }
+  ],
+  "forbidden": [
+    { "header": "x-powered-by", "description": "Framework fingerprinting." },
+    { "header": "server", "description": "Product and version fingerprinting." }
+  ],
+  "exceptions": [
+    {
+      "route": "legacy-report-viewer",
+      "header": "content-security-policy",
+      "reason": "CSP rollout in progress; report-only is collecting violations. Accepted by platform-security on 2026-02-10.",
+      "expires": "2026-09-30"
+    }
+  ]
+}
