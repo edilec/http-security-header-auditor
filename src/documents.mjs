@@ -468,7 +468,11 @@ function compileRequirement(sink, file, raw, index) {
       }
       names.push(asciiLower(candidate))
     }
-    requirement.requiredDirectives = [...new Set(names)].sort(byCodeUnit)
+    // Not sorted: this list is only ever tested for membership and never
+    // reaches output, so an order here would be an ordering site no test could
+    // pin. Deduplication keeps it deterministic; insertion order keeps it
+    // readable against the policy it came from.
+    requirement.requiredDirectives = [...new Set(names)]
   }
 
   if (raw.forbiddenSources !== undefined) {
@@ -500,7 +504,8 @@ function compileRequirement(sink, file, raw, index) {
       }
       sources.push(asciiLower(candidate))
     }
-    requirement.forbiddenSources = [...new Set(sources)].sort(byCodeUnit)
+    // Not sorted, for the same reason as requiredDirectives above.
+    requirement.forbiddenSources = [...new Set(sources)]
   }
 
   if (raw.minMaxAge !== undefined) {

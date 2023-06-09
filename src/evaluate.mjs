@@ -406,7 +406,10 @@ function evaluateRoute(context, route) {
   }
 
   const waived = []
-  const headers = [...pending.keys()].sort(byCodeUnit)
+  // Insertion order, which is fixed by the documents: every finding is sorted
+  // again when the report is built, so an order here would decide nothing a
+  // test could observe.
+  const headers = [...pending.keys()]
   for (const header of headers) {
     const rows = pending.get(header)
     const waivable = rows.filter((row) => isWaivable(row.ruleId))
