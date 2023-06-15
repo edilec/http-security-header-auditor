@@ -197,12 +197,19 @@ const DAYS_IN_MONTH = Object.freeze([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30,
  * A calendar date, written `YYYY-MM-DD`, validated without a `Date`.
  *
  * Exception expiry is the one place this tool compares against "now", and
- * "now" is injected as `--as-of`. Constructing a `Date` to validate the string
- * would drag a wall clock and a time zone into a package that has neither:
- * `new Date('2026-02-30')` is a real date in some engines and invalid in
- * others, and `new Date('2026-06-01')` is midnight UTC, which is the previous
- * evening in most of the world. Two `YYYY-MM-DD` strings compare correctly with
- * `<`, so no date arithmetic is needed and none is done.
+ * "now" is injected as `--as-of`. Constructing a date object to validate the
+ * string would drag a wall clock and a time zone into a package that has
+ * neither: the built-in constructor accepts `2026-02-30` in some engines and
+ * rejects it in others, and a `YYYY-MM-DD` string it does accept becomes
+ * midnight UTC, which is the previous evening in most of the world. Two
+ * `YYYY-MM-DD` strings compare correctly with `<`, so no date arithmetic is
+ * needed and none is done.
+ *
+ * `test/no-network.test.mjs` scans the shipped source for that constructor and
+ * for the static millisecond reader beside it, so neither spelling appears
+ * anywhere above -- the scan is deliberately strict enough to trip on a mention
+ * in prose, which errs towards a test that is too loud rather than a guard that
+ * is too quiet.
  */
 export function isCalendarDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
