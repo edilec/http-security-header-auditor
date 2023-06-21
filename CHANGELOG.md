@@ -37,5 +37,15 @@ recorded here.
   U+2029 and the bidi controls, and bounded.
 - A waiver can excuse a verdict about a response and can never excuse a gap in
   the evidence.
+- A parse failure does not quote the file it failed on. V8 writes
+  `Unexpected token 'A', "AKIAIOSFODNN7EXAMPLE" is not valid JSON`, and
+  `input-not-json` interpolated that message, so a capture short enough to be
+  nothing but a credential was reproduced in full on stdout -- the one string
+  reaching output that stripping and bounding could not contain, since `excerpt`
+  cuts from the end and the quoted span is at the front. The finding now carries
+  the position, line, column and offending token and never the text at them, and
+  `test/parse-failure-redaction.test.mjs` drives the published placeholder
+  through the real binary and asserts it absent from stdout, from stderr and
+  from every prefix down to eight characters.
 
 No release has been published.

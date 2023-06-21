@@ -40,6 +40,7 @@ import {
   hasForbiddenCharacter,
   isCalendarDate,
   isPlainObject,
+  parseFailureDetail,
 } from './text.mjs'
 
 export const TOOL_ID = 'http-security-header-auditor'
@@ -314,7 +315,7 @@ async function loadJson(sink, file, real, limits) {
     sink.add({
       file,
       ruleId: 'input-not-json',
-      message: `${file} is not valid JSON: ${error.message}`,
+      message: `${file} is not valid JSON: ${parseFailureDetail(error)}`,
       suggestion: 'Validate the file with a JSON parser before re-running.',
     })
     return null
@@ -545,4 +546,5 @@ export {
   EXCERPT_LIMIT, MAX_DESCRIPTION_LENGTH, MAX_HEADER_NAME_LENGTH, MAX_IDENTIFIER_LENGTH,
   MAX_REASON_LENGTH, asciiLower, byCodeUnit, decodeUtf8, describeValue, excerpt,
   hasForbiddenCharacter, isCalendarDate, isHeaderName, isIdentifier, isPlainObject, looksLikePattern,
+  parseFailureDetail,
 } from './text.mjs'

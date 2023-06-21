@@ -254,6 +254,11 @@ interchangeable with `pass`, and it exits 2.
   compared against the number of routes that compiled.
 - `no-checks-performed`, which refuses the vacuous pass.
 
+`input-not-json` reports the position, line and column of the parse failure and
+never the text at it. V8 quotes the input back in its own parse message, so a
+capture short enough to be nothing but a credential would otherwise be
+reproduced in full by its own error.
+
 ## Limits
 
 Every limit is enforced, and exceeding one produces a finding that names it.
