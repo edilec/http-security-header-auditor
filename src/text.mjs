@@ -134,21 +134,50 @@ export function excerpt(value, limit = EXCERPT_LIMIT) {
  * control characters and cuts from the end, and the quoted span sits at the
  * front.
  *
+ * Two things make this safe and the order of them is the whole trick.
+ *
+ * The quoting shape is recognised BEFORE the offset is looked for. A capture
+ * whose own text reads `at position 1` produces
+ * `Unexpected token 'a', "at position 1" is not valid JSON`, so an
+ * offset-first reading finds `at position 1` INSIDE the quoted span and slices
+ * the file's own text back out as if it were V8's prose. That is not
+ * hypothetical: it is what the previous version of this function did. The `s`
+ * flag matters for the same reason -- the quoted span can contain a newline.
+ *
+ * The last line then discards any detail that still holds a double quote. That
+ * is deliberate belt and braces, and it is why this function is safe against
+ * wordings it has never seen: every V8 parse message that carries no quoted
+ * snippet also carries no double quote at all, because it quotes JSON
+ * punctuation with apostrophes. A surviving double quote therefore means a
+ * surviving snippet, whatever the branches above concluded.
+ *
  * Position, line and column are the useful half and carry no file content, so
- * they are kept verbatim; so is the offending token, one character wide and
- * bounded here to stay that way. V8 has a third spelling for a failure further
- * into the file, `..."headers": AKIAIOSFOD"...`, which quotes a window rather
- * than a prefix and carries no position at all; that one keeps only the token.
- * The quoted half never leaves this function.
+ * they are kept verbatim once no quoting shape was recognised.
  */
+const UNPARSEABLE = 'the file could not be parsed as JSON'
+
+/** Where V8 puts the offending offset. Safe: an offset says nothing about content. */
+const POSITION = /at position \d+(?: \(line \d+ column \d+\))?/
+
+/** The shape that quotes the input. Recognised first; see the note above. */
+const QUOTES_THE_INPUT = /^Unexpected token (.+?), (\.\.\.)?".*"(?:\.\.\.)? is not valid JSON$/s
+
+function describeParseFailure(message) {
+  const quoting = QUOTES_THE_INPUT.exec(message)
+  if (quoting !== null) {
+    const where = quoting[2] === undefined ? 'at the start of the document' : 'inside the document'
+    return `unexpected token ${quoting[1]} ${where}`
+  }
+  const position = POSITION.exec(message)
+  if (position !== null) return message.slice(0, position.index + position[0].length)
+  if (message === 'Unexpected end of JSON input') return message
+  return UNPARSEABLE
+}
+
 export function parseFailureDetail(error) {
-  const message = String(error?.message ?? 'could not be parsed')
-  const position = /at position \d+(?: \(line \d+ column \d+\))?/.exec(message)
-  if (position) return message.slice(0, position.index + position[0].length)
-  const token = /^Unexpected token (.{1,8}?), (\.\.\.)?".*?"(?:\.\.\.)? is not valid JSON$/s.exec(message)
-  if (token) return token[2] === undefined ? `unexpected token ${token[1]} at the start of the document` : `unexpected token ${token[1]}`
-  if (/^Unexpected end of JSON input$/.test(message)) return message
-  return 'the file could not be parsed as JSON'
+  const message = String(error?.message ?? '')
+  const detail = describeParseFailure(message)
+  return detail.includes('"') ? UNPARSEABLE : detail
 }
 
 /**
