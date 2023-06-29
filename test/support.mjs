@@ -108,6 +108,28 @@ export async function cliRun(args) {
   }
 }
 
+/**
+ * Spawn the real binary with a V8 heap this small, and nothing else changed.
+ *
+ * A bound on memory can only be observed by running out of it. The heap size is
+ * the one knob that turns "this accumulates without limit" into a result a test
+ * can read: an unbounded run dies with an exit code outside the documented
+ * contract and an empty stdout, while a bounded one finishes and prints its
+ * report.
+ */
+export async function cliRunBoundedHeap(megabytes, args) {
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [`--max-old-space-size=${megabytes}`, CLI, ...args],
+      { cwd: projectDirectory, maxBuffer: 64 * 1024 * 1024 },
+    )
+    return { code: 0, stdout, stderr }
+  } catch (error) {
+    return { code: error.code, stdout: error.stdout ?? '', stderr: error.stderr ?? '' }
+  }
+}
+
 /** Spawn the real binary over a temporary root, and parse whatever stdout carried. */
 export async function cliReport(files, extraArgs = []) {
   return withRoot(files, async (root) => {

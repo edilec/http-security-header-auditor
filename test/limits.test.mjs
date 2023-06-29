@@ -10,10 +10,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { DEFAULT_LIMITS, HARD_LIMITS, auditHeaders, validateLimits } from '../src/index.mjs'
+import { DEFAULT_LIMITS, HARD_LIMITS, MAX_FIELD_CHECKS, auditHeaders, validateLimits } from '../src/index.mjs'
 import {
+  AS_OF,
   apiReport,
   cliReport,
+  cliRun,
+  cliRunBoundedHeap,
   clean,
   exception,
   findingsFor,
@@ -22,6 +25,7 @@ import {
   raisedRules,
   requirement,
   route,
+  withRoot,
 } from './support.mjs'
 
 const REQUIRE_CSP = { required: [requirement('content-security-policy')] }
@@ -146,6 +150,87 @@ test('more findings than maxFindings is a partial report that says it is partial
   assert.equal(report.status, 'incomplete')
   assert.equal(report.findings.length, 4)
   assert.equal(findingsFor(report, 'too-many-findings')[0].message.includes('3 were not reported'), true)
+})
+
+/**
+ * The size of a report is a product, and the product is bounded too.
+ *
+ * `maxRoutes` and `maxRequirements` each bound one dimension and each is
+ * enforced. What neither of them bounds is the report, because every route row
+ * lists the required fields that route was missing: the entries are
+ * `maxRoutes x maxRequirements`, and at the published caps that is forty
+ * million. A run at those caps built a report `JSON.stringify` refused --
+ * `RangeError: Invalid string length` -- and exited with an empty stdout and an
+ * exit code that says the capture was audited and failed.
+ *
+ * The product is therefore refused in `validateLimits`, before any evidence is
+ * read: a configuration is not a subject, so refusing one claims nothing about
+ * anything.
+ */
+test('two limits whose product this build cannot report are refused together', () => {
+  assert.throws(
+    () => validateLimits({ maxRoutes: HARD_LIMITS.maxRoutes, maxRequirements: HARD_LIMITS.maxRequirements }),
+    /times limits.maxRequirements \(2000\) is 40000000 field check\(s\), above the 5000000/,
+  )
+  assert.equal(
+    HARD_LIMITS.maxRoutes * HARD_LIMITS.maxRequirements > MAX_FIELD_CHECKS,
+    true,
+    'the caps still multiply past what one report can hold, so this bound still has a subject',
+  )
+})
+
+test('the field-check bound is applied at the product, not one below it', () => {
+  const routes = MAX_FIELD_CHECKS / 1000
+  assert.equal(validateLimits({ maxRoutes: routes, maxRequirements: 1000 }).maxRoutes, routes)
+  assert.throws(() => validateLimits({ maxRoutes: routes + 1, maxRequirements: 1000 }), /above the 5000000/)
+  assert.equal(DEFAULT_LIMITS.maxRoutes * DEFAULT_LIMITS.maxRequirements <= MAX_FIELD_CHECKS, true)
+})
+
+test('the command line refuses that pair with an empty stdout and no report', async () => {
+  const result = await withRoot(clean(), (root) => cliRun([
+    '--root', root, '--json',
+    '--max-routes', String(HARD_LIMITS.maxRoutes),
+    '--max-requirements', String(HARD_LIMITS.maxRequirements),
+  ]))
+
+  assert.equal(result.code, 2)
+  assert.equal(result.stdout, '', 'a configuration that never had a subject does not print a report')
+  assert.match(result.stderr, /field check\(s\), above the/)
+})
+
+/**
+ * `maxFindings` bounds the run, not just the printed array.
+ *
+ * It used to bound only the array: every row was accumulated, turned into a
+ * finding object and sorted, and only then was the slice applied. So the bound
+ * cost as much memory as having no bound at all, and at limits this package
+ * publishes as legal the process died of heap exhaustion -- exit 134, empty
+ * stdout, no finding naming any limit. `maxRuntimeMs` could not save it either:
+ * the collapse is in report construction, after the loop the budget guards.
+ *
+ * A million findings against a five-finding budget is the shape, and a small
+ * heap is what makes the difference observable: bounded on arrival it finishes
+ * inside 96 MB, unbounded it dies with a gigabyte.
+ */
+test('a million findings against a five-finding budget runs in a small heap', async () => {
+  const routes = Array.from({ length: 1000 }, (_, index) => route(`r${String(index).padStart(5, '0')}`, []))
+  const required = Array.from({ length: 1000 }, (_, index) => requirement(`x-required-${String(index).padStart(4, '0')}`))
+
+  const result = await withRoot(fixture({ required }, routes), (root) => cliRunBoundedHeap(256, [
+    '--root', root, '--json', '--as-of', AS_OF,
+    '--max-routes', '1000', '--max-requirements', '1000',
+    '--max-findings', '5', '--max-runtime-ms', '600000',
+  ]))
+
+  assert.equal(result.code, 2, `the run did not finish: ${result.stderr.slice(0, 200)}`)
+  assert.notEqual(result.stdout, '', 'the run printed no report at all')
+
+  const report = JSON.parse(result.stdout)
+  assert.equal(report.status, 'incomplete')
+  assert.equal(report.findings.length, 5)
+  assert.equal(report.summary.checked, 1000000)
+  const truncation = findingsFor(report, 'too-many-findings')[0]
+  assert.equal(truncation.message.includes('999996 were not reported'), true, truncation.message)
 })
 
 /**

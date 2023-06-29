@@ -94,6 +94,31 @@ export const HARD_LIMITS = Object.freeze({
 
 const MAX_NAME_LENGTH = 200
 
+/**
+ * The most field checks one report will hold, and the reason it is a product.
+ *
+ * Every other limit here bounds one dimension, and each one of them is enforced
+ * exactly as documented. The size of a report is not one dimension: it is
+ * `maxRoutes` multiplied by `maxRequirements`, because every route row lists the
+ * required fields that route was missing. At the published caps that product is
+ * forty million entries, and a run at those caps built a report that
+ * `JSON.stringify` refused -- `RangeError: Invalid string length`, an empty
+ * stdout, and an exit code that says the capture was audited and failed. Nothing
+ * was audited and nothing failed.
+ *
+ * So the product is capped too, and it is capped in `validateLimits` rather than
+ * mid-run: a configuration this build cannot carry to a report has no subject
+ * yet, so it is refused before any evidence is read, the way an unknown limit
+ * key and an out-of-range value already are. That is a refusal to start, not a
+ * truncation -- nothing is audited and nothing is claimed.
+ *
+ * The number is measured, not guessed. At five million checks the worst report
+ * this shape can produce is 137 MB of stdout and 927 MB of resident memory in
+ * 6.3 s, and `JSON.stringify` gives up somewhere past twenty million. The
+ * default limits ask for fifty thousand.
+ */
+export const MAX_FIELD_CHECKS = 5000000
+
 const ALLOWED_OPTIONS = Object.freeze(['asOf', 'capture', 'clock', 'limits', 'policy', 'root'])
 
 /** Raised when the run passes its time budget; turned into a finding by the caller. */
@@ -119,6 +144,13 @@ export function validateLimits(overrides = {}) {
       throw new TypeError(`limits.${key} must be an integer between 1 and ${cap}`)
     }
     limits[key] = value
+  }
+  const checks = limits.maxRoutes * limits.maxRequirements
+  if (checks > MAX_FIELD_CHECKS) {
+    throw new TypeError(
+      `limits.maxRoutes (${limits.maxRoutes}) times limits.maxRequirements (${limits.maxRequirements}) is ${checks} field check(s), ` +
+      `above the ${MAX_FIELD_CHECKS} this build will hold in one report; lower one of them.`,
+    )
   }
   return Object.freeze(limits)
 }
@@ -158,12 +190,38 @@ function validateName(name, flag) {
   return name
 }
 
+/**
+ * The findings, bounded as they arrive.
+ *
+ * Bounding at report-build time is not a bound at all: every row still has to
+ * exist, and be turned into a finding object, and be sorted, before the slice
+ * that drops it runs. At limits this package publishes as legal -- 20000 routes
+ * against 2000 required fields, both files well under `maxFileBytes` -- that is
+ * forty million rows, and the process died of heap exhaustion with an empty
+ * stdout and an exit code of 134: outside the documented 0/1/2 contract, with
+ * no finding naming any limit, which is the one outcome a limit exists to
+ * prevent. `maxRuntimeMs` could not save it either, because the collapse is in
+ * report construction after the loop the budget guards.
+ *
+ * So the cap is applied here, on arrival. Rows past it are counted and
+ * discarded, and `buildReport` turns that count into the `too-many-findings`
+ * finding that names the limit and marks the run incomplete. The memory a run
+ * needs for findings is now bounded by `maxFindings`, whatever the documents
+ * could raise.
+ */
 class FindingSink {
-  constructor() {
+  constructor(maxFindings) {
+    if (!Number.isInteger(maxFindings) || maxFindings < 1) throw new TypeError('maxFindings must be a positive integer')
     this.rows = []
+    this.limit = maxFindings
+    this.dropped = 0
   }
 
   add(row) {
+    if (this.rows.length >= this.limit) {
+      this.dropped += 1
+      return
+    }
     this.rows.push({ pointer: '', ...row })
   }
 }
@@ -192,8 +250,12 @@ function buildReport(sink, state, limits, files) {
   let findings = sink.rows.map((row) => createFinding(row)).sort(compareFindings)
   let truncated = false
 
-  if (findings.length > limits.maxFindings) {
-    const dropped = findings.length - limits.maxFindings + 1
+  if (sink.dropped > 0) {
+    // One kept row makes way for the finding that names the limit, so a
+    // truncated report is exactly `maxFindings` long and says so. `dropped`
+    // counts every row the sink refused, which is the honest total even though
+    // those rows were never built.
+    const dropped = sink.dropped + 1
     findings = findings.slice(0, limits.maxFindings - 1)
     findings.push(createFinding({
       file: files.capture,
@@ -381,7 +443,7 @@ export async function auditHeaders(options = {}) {
     },
   }
 
-  const sink = new FindingSink()
+  const sink = new FindingSink(limits.maxFindings)
   const state = createEvaluationState()
   state.asOf = asOf
   state.routes = 0

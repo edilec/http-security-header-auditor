@@ -192,6 +192,17 @@ Every limit is enforced and exceeding one produces a finding that names it —
 never a silent truncation, never a pass. `docs/header-rules.md` lists all ten
 with their defaults, caps and flags.
 
+Two of them multiply. Every route row lists the required fields that route was
+missing, so the report holds `maxRoutes × maxRequirements` entries, and at the
+published caps that is forty million — enough that `JSON.stringify` refuses the
+report and the process exits with an empty stdout. The product is therefore
+capped at 5,000,000 field checks and is checked with the other limits, before any
+file is opened: a configuration this build cannot carry to a report is refused
+with an empty stdout and exit 2, which is the configuration-error shape, not a
+verdict about a capture. `maxFindings` likewise bounds the run and not only the
+printed array — findings past it are discarded as they are raised and counted
+into `too-many-findings`, rather than accumulated and then sliced.
+
 The bound that carries the weight is `maxHeaderValueLength`, because it is the
 one that can actually fire. You cannot bound a regular expression with a time
 check around the call: the engine does not yield. So nothing here compiles a

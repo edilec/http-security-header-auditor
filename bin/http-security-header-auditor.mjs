@@ -61,6 +61,11 @@ Options:
 Every option that carries a value may be given only once: a repeated flag is a
 configuration error, not a silent last-wins.
 
+--max-routes and --max-requirements multiply: every route row lists the required
+fields that route was missing, so a report holds their product in entries. That
+product may not exceed 5000000, and a pair that does is refused here, before any
+file is opened, with an empty stdout and exit 2.
+
 Output:
   stdout  the JSON report only, so it can be piped straight into a parser
   stderr  the human summary and diagnostics

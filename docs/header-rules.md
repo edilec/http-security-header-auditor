@@ -280,6 +280,32 @@ Exceeding a limit is never a silent truncation and never a pass.
 An unknown limit name is a configuration error, not a key to ignore: a
 one-character typo must not turn a real failure into a green run.
 
+`maxFindings` bounds the run, not only the printed array. Findings past the limit
+are discarded as they are raised and counted, and the count becomes the
+`too-many-findings` finding; nothing accumulates a report that would then be
+sliced down to size. The findings a truncated report keeps are therefore the
+first ones raised — emission order is fixed by the documents, so this is
+deterministic — and they are sorted for printing like any other report.
+
+### The one bound that is a product
+
+`maxRoutes` and `maxRequirements` each bound one dimension, and each is enforced
+exactly as the table says. The size of a report is neither of them: every route
+row lists the required fields that route was missing, so the entries are
+`maxRoutes` multiplied by `maxRequirements`. At the caps above that product is
+forty million, and a run at the caps built a report `JSON.stringify` refused —
+`RangeError: Invalid string length`, an empty stdout, and an exit code claiming
+the capture was audited and failed. It was not audited and nothing failed.
+
+So the product is capped at **5,000,000 field checks**, and it is checked where
+the other limits are validated, before any file is opened. A configuration this
+build cannot carry to a report is refused with an empty stdout and exit 2, the
+same way an unknown limit key and an out-of-range value already are: a
+configuration is not a subject, so refusing one claims nothing about anything.
+The default limits ask for 50,000. The number is measured — at five million
+checks the largest report this shape produces is 137 MB of stdout and 927 MB of
+resident memory in 6.3 s.
+
 ### Why `maxHeaderValueLength` is the bound that matters
 
 You cannot bound a regular expression with a time check around the call, because
