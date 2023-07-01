@@ -1,5 +1,5 @@
 /**
- * The eight ordering sites that cannot be pinned, proved equivalent instead of
+ * The six ordering sites that cannot be pinned, proved equivalent instead of
  * left as gaps.
  *
  * `test/ordering.test.mjs` pins fifteen of this package's twenty-one ordering
