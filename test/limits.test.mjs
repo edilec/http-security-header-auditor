@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { DEFAULT_LIMITS, HARD_LIMITS, MAX_FIELD_CHECKS, auditHeaders, validateLimits } from '../src/index.mjs'
+import { DEFAULT_LIMITS, HARD_LIMITS, MAX_FIELD_CHECKS, auditHeaders, exitCodeFor, validateLimits } from '../src/index.mjs'
 import {
   AS_OF,
   apiReport,
@@ -271,6 +271,48 @@ test('a run that passes its budget before the first route evaluates nothing', as
   assert.equal(report.summary.evaluated, 0)
   assert.deepEqual(report.routes, [])
   assert.equal(report.summary.checked, 0)
+})
+
+/**
+ * The budget can also run out *after* the last route, and that run is not
+ * complete either.
+ *
+ * `rows.length !== routes.length` catches an abort in the middle of the loop.
+ * It does not catch this one: every route has a row, so the counts agree and
+ * that comparison says nothing. What did not run is the scan after the loop --
+ * the one that reports a waiver naming a route the capture does not contain,
+ * and a waiver that excused nothing. Without the second assignment the report
+ * comes back `fail` with an exit code of 1, which is a verdict about a run that
+ * stopped before it had finished looking.
+ */
+test('a budget that runs out after the last route is still an unfinished run', async () => {
+  // started, route a, route b, then the check after the loop.
+  let tick = 0
+  const clock = () => {
+    tick += 1
+    return tick <= 3 ? 0 : 999999
+  }
+
+  const report = await apiReport(fixture(
+    {
+      required: [requirement('x-content-type-options', { allowedValues: ['nosniff'] })],
+      exceptions: [exception('ghost', 'x-content-type-options', 'the route is being retired next quarter', '2027-01-01')],
+    },
+    [
+      route('a', [header('X-Content-Type-Options', 'nosniff')]),
+      route('b', [header('X-Content-Type-Options', 'nosniff')]),
+    ],
+  ), { clock, asOf: AS_OF, limits: { maxRuntimeMs: 1000 } })
+
+  assert.equal(report.routes.length, report.summary.routes, 'every route has a row, so the row count cannot catch this one')
+  assert.equal(raisedRules(report).includes('time-budget-exceeded'), true)
+  assert.equal(
+    raisedRules(report).includes('exception-route-unknown'),
+    false,
+    'the scan after the loop never ran, which is exactly why this run is not finished',
+  )
+  assert.equal(report.status, 'incomplete')
+  assert.equal(exitCodeFor(report), 2)
 })
 
 test('a generous budget evaluates every route and says nothing about time', async () => {

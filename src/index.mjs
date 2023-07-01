@@ -531,9 +531,17 @@ export async function auditHeaders(options = {}) {
      * Deliberately not set in the `catch` above. A flag set where the failure is
      * noticed backstops itself: delete it and the rule that fired there still
      * makes the report non-green, so no test can tell. Set here instead, from
-     * the count of rows that actually exist, it is load-bearing -- remove it and
-     * an aborted run reports `fail` with an exit code of 1, and
-     * `test/limits.test.mjs` says so.
+     * the count of rows that actually exist, it is load-bearing.
+     *
+     * Two assignments, because there are two ways to stop early and the first
+     * line catches only one of them. An abort in the middle of the loop leaves
+     * fewer rows than routes. An abort at the check *after* the loop leaves
+     * every route with a row, so the counts agree and the first line says
+     * nothing -- while the scan that reports a waiver naming a route the capture
+     * does not contain, and a waiver that excused nothing, never ran at all.
+     * `test/limits.test.mjs` drives an injected clock past the budget at each
+     * of those two points, and deleting either line turns one of them from
+     * `incomplete` with an exit code of 2 into `fail` with an exit code of 1.
      *
      * A run that says "unknown" is useless; a run that says "confirmed" when it
      * is not is harmful. Every route the loop was responsible for and did not
