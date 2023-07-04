@@ -328,8 +328,14 @@ after the loop rather than trusting the loop to have finished.
 - Ordering is by UTF-16 code unit everywhere. Field names are RFC 9110 tokens, so
   `-` and `_` both occur in real ones, and English collation orders `x_audit`
   before `x-audit` while their code points order them the other way round.
-- No wall clock, no locale, no random source, no filesystem enumeration order.
-  The only date the tool reads is the one `--as-of` carries.
+- No locale, no random source, no filesystem enumeration order. The only date
+  the tool reads is the one `--as-of` carries.
+- The one clock is the monotonic source `maxRuntimeMs` is measured against, and
+  it is the one thing that breaks byte-identity: a run that trips the budget
+  reaches however many routes the machine let it reach. Two runs over identical
+  inputs are byte-identical unless the budget fires. When it does, the report is
+  `incomplete` with exit 2 every time regardless of where it stopped — the
+  amount of evidence varies, the verdict direction does not.
 
 ## Report shape
 

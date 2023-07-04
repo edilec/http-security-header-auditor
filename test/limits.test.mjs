@@ -8,6 +8,8 @@
  */
 
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import { DEFAULT_LIMITS, HARD_LIMITS, MAX_FIELD_CHECKS, auditHeaders, exitCodeFor, validateLimits } from '../src/index.mjs'
@@ -22,6 +24,7 @@ import {
   findingsFor,
   fixture,
   header,
+  projectDirectory,
   raisedRules,
   requirement,
   route,
@@ -313,6 +316,64 @@ test('a budget that runs out after the last route is still an unfinished run', a
   )
   assert.equal(report.status, 'incomplete')
   assert.equal(exitCodeFor(report), 2)
+})
+
+/**
+ * The one thing in this package that is not byte-identical run to run, stated
+ * where the claim is made.
+ *
+ * Everything else here is fixed by the documents: no locale, no random source,
+ * no filesystem enumeration order, and the only date is the one `--as-of`
+ * carries. The time budget is the exception, because it is measured against a
+ * monotonic clock, and how many routes a run reaches before it trips depends on
+ * the machine. Eight runs over one fixed 400-route capture with
+ * `--max-runtime-ms 20` produced six different reports.
+ *
+ * The verdict direction is what has to hold instead, and it does: a run that
+ * trips the budget is `incomplete` with exit 2 whatever it reached. This case
+ * drives the two extremes with an injected clock -- nothing evaluated, and
+ * everything evaluated with the budget gone at the post-loop check -- and
+ * asserts the reports differ while the verdict does not. The documentation is
+ * checked here too, because a claim nobody reads back is a claim that drifts.
+ */
+test('a budget that fires is the one thing that is not byte-identical, and the docs say so', async () => {
+  const files = fixture(
+    { required: [requirement('x-content-type-options', { allowedValues: ['nosniff'] })] },
+    [
+      route('a', [header('X-Content-Type-Options', 'nosniff')]),
+      route('b', [header('X-Content-Type-Options', 'nosniff')]),
+    ],
+  )
+  const runWith = (spent) => {
+    let tick = 0
+    return apiReport(files, {
+      clock: () => {
+        tick += 1
+        return tick <= spent ? 0 : 999999
+      },
+      limits: { maxRuntimeMs: 1000 },
+    })
+  }
+
+  const nothing = await runWith(1)
+  const everything = await runWith(3)
+
+  assert.notEqual(
+    JSON.stringify(nothing),
+    JSON.stringify(everything),
+    'the same input under the same limits already produced the same bytes, so this claim needs no qualifying',
+  )
+  for (const report of [nothing, everything]) {
+    assert.equal(raisedRules(report).includes('time-budget-exceeded'), true)
+    assert.equal(report.status, 'incomplete')
+    assert.equal(exitCodeFor(report), 2)
+  }
+  assert.notEqual(nothing.summary.evaluated, everything.summary.evaluated, 'the two runs reached the same point')
+
+  const readme = await readFile(join(projectDirectory, 'README.md'), 'utf8')
+  assert.match(readme, /byte-identical stdout, \*unless\* `maxRuntimeMs` fires/)
+  const rules = await readFile(join(projectDirectory, 'docs/header-rules.md'), 'utf8')
+  assert.match(rules, /byte-identical unless the budget fires/)
 })
 
 test('a generous budget evaluates every route and says nothing about time', async () => {

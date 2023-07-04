@@ -175,7 +175,13 @@ a build over.
 - **No writes.** Read-only. It never touches the root it was pointed at, and
   there is no auto-fix.
 - **No clock, no locale, no randomness.** Two runs over identical inputs produce
-  byte-identical stdout. Ordering is by UTF-16 code unit — field names are
+  byte-identical stdout, *unless* `maxRuntimeMs` fires: the time budget is the
+  one thing here that reads a monotonic clock, and how many routes a run reaches
+  before it trips depends on the machine. Eight runs over one fixed 400-route
+  capture with `--max-runtime-ms 20` gave six different reports, evaluating 0,
+  21, 79, 168, 169 and 322 routes. What does not vary is the direction: a run
+  that trips the budget is `incomplete` with exit 2 every time, whatever it
+  managed to evaluate. Ordering is by UTF-16 code unit — field names are
   RFC 9110 tokens, so `-` and `_` both occur, and English collation orders
   `x_audit` before `x-audit` while their code points order them the other way
   round.
