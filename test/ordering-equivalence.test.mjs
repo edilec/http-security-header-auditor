@@ -12,7 +12,21 @@
  *   directives named in `csp-analysis-incomplete`.
  * - Rule ids, over `[a-z-]`: the finding sort key and the list of waived rules
  *   in `exception-applied`.
- * - JSON Pointers, over `[A-Za-z0-9/]`: the finding sort key.
+ *
+ * The sixth site, the pointer component of the finding sort key, is *not* one
+ * of them, and saying it was is the mistake this file used to make. JSON
+ * Pointers are drawn from `[A-Za-z0-9/]`, which includes upper case, and
+ * collation folds case before it compares: `/required/0/requiredDirectives/0`
+ * sorts after `/required/0/requireIncludeSubDomains` by code unit and before it
+ * under a collator. The old shape list simply omitted the two pointers that
+ * make that visible, so it enumerated a subset on which the agreement happened
+ * to hold and called the result a proof.
+ *
+ * What actually holds is narrower and is checked below in two halves: every
+ * disagreeing pair of emittable pointers shares one `/required/N/` prefix, and
+ * no report ever carries two findings under one such prefix. The second half is
+ * an invariant of the code, not of the alphabet, so it is pinned by running the
+ * real entry point over policies that try hard to break it.
  *
  * Substituting a collator at those six sites is an *equivalent* mutation: the
  * output cannot change, so no test can catch it, and saying so with an
@@ -39,6 +53,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { KNOWN_DIRECTIVES, RULE_SEVERITY, byCodeUnit } from '../src/index.mjs'
+import { AS_OF, apiReport, fixture, header, route } from './support.mjs'
 
 const collator = new Intl.Collator('en')
 
@@ -158,18 +173,99 @@ const POINTER_SHAPES = Object.freeze([
   (n) => [`/exceptions/${n}/route`, `/exceptions/${n}/expires`, `/exceptions/${n}/reason`, `/exceptions/${n}/header`],
   (n) => [`/forbidden/${n}/header`, `/forbidden/${n}/description`],
   (n) => [`/routes/${n}/headers/${n}`, `/routes/${n}/headers/${n}/name`, `/routes/${n}/headers/${n}/value`],
+  // The two that were missing. `compileRequirement` type-checks these in a loop
+  // over the key names, so they are emitted exactly as spelled, capital letters
+  // and all -- and they are what breaks the agreement.
+  (n) => [`/required/${n}/requireIncludeSubDomains`, `/required/${n}/requirePreload`],
 ])
 
-test('every ordered pair of emittable JSON Pointers agrees', () => {
+/** The prefix under which, and only under which, the two orders disagree. */
+const ONE_REQUIREMENT = /^(\/required\/\d+)\//
+
+function emittablePointers() {
   const pointers = new Set()
   for (const build of POINTER_SHAPES) {
     for (const index of [0, 1, 2, 9, 10, 11, 99, 100, 101]) {
       for (const pointer of build(index)) pointers.add(pointer)
     }
   }
+  return [...pointers]
+}
 
-  const values = [...pointers]
+test('emittable JSON Pointers disagree, and only ever within one requirement', () => {
+  const values = emittablePointers()
+
   assert.equal(values.length > 100, true)
-  for (const pointer of values) assert.match(pointer, /^(\/[A-Za-z0-9]+)*$/, 'the alphabet this proof rests on')
-  assert.equal(everyOrderedPairAgrees(values, 'pointer'), values.length ** 2)
+  for (const pointer of values) assert.match(pointer, /^(\/[A-Za-z0-9]+)*$/, 'the alphabet these pointers are drawn from')
+
+  const disagreements = []
+  for (const left of values) {
+    for (const right of values) {
+      if (Math.sign(byCodeUnit(left, right)) !== Math.sign(collator.compare(left, right))) disagreements.push([left, right])
+    }
+  }
+
+  assert.notEqual(
+    disagreements.length,
+    0,
+    'the shape list has stopped emitting the pointers that disagree, so this file is back to proving a subset',
+  )
+  for (const [left, right] of disagreements) {
+    const prefix = ONE_REQUIREMENT.exec(left)
+    assert.notEqual(prefix, null, `"${left}" vs "${right}" disagree outside a single requirement`)
+    assert.equal(
+      right.startsWith(`${prefix[1]}/`),
+      true,
+      `"${left}" vs "${right}" disagree across two different requirements`,
+    )
+  }
+})
+
+/**
+ * The invariant that makes the disagreement unobservable, pinned by behaviour.
+ *
+ * Two findings whose pointers disagree would have to sit under the same
+ * `/required/N/` prefix, and no report carries two of those: every diagnostic
+ * `compileRequirement` raises about one entry is followed by a `return null`,
+ * and the duplicate-header check that also anchors there only runs on an entry
+ * that compiled without one. That is a property of the code, so an alphabet
+ * cannot prove it and each case below drives the real entry point instead.
+ *
+ * If this ever stops holding, the pointer comparison in `compareFindings`
+ * becomes observable and a collator swapped in for it would reorder a real
+ * report. That is the whole reason this is a test and not a sentence.
+ */
+test('no report carries two findings under one requirement', async () => {
+  const policies = [
+    // Four independent faults in one entry: the first one ends it.
+    { required: [{ header: 'strict-transport-security', allowedValues: [], minMaxAge: 'soon', requireIncludeSubDomains: 'yes', requirePreload: 'no' }] },
+    // The two pointers that disagree, both wrong at once.
+    { required: [{ header: 'strict-transport-security', requireIncludeSubDomains: 'yes', requirePreload: 'no' }] },
+    // A bad nested value and a bad sibling.
+    { required: [{ header: 'content-security-policy', requiredDirectives: [''], forbiddenSources: [] }] },
+    // An entry that compiles, then collides with the one before it.
+    { required: [{ header: 'x-frame-options' }, { header: 'x-frame-options' }] },
+    // An entry that compiles, then contradicts a forbidden entry.
+    { required: [{ header: 'x-frame-options' }], forbidden: [{ header: 'x-frame-options' }] },
+    // A stray key beside a fault the checks would otherwise reach.
+    { required: [{ header: 'strict-transport-security', minMaxAge: -1, nonsense: true }] },
+  ]
+
+  for (const policy of policies) {
+    const report = await apiReport(fixture(policy, [route('r', [header('X-Frame-Options', 'DENY')])]), { asOf: AS_OF })
+
+    const seen = new Map()
+    for (const finding of report.findings) {
+      const prefix = ONE_REQUIREMENT.exec(finding.location.pointer)
+      if (prefix === null) continue
+      const already = seen.get(prefix[1])
+      assert.equal(
+        already,
+        undefined,
+        `${JSON.stringify(policy)} produced two findings under ${prefix[1]}: ${already} and ${finding.location.pointer}`,
+      )
+      seen.set(prefix[1], finding.location.pointer)
+    }
+    assert.notEqual(report.findings.length, 0, `${JSON.stringify(policy)} raised nothing, so it pins nothing`)
+  }
 })
