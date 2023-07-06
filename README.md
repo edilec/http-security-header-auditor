@@ -94,6 +94,14 @@ a reason and a date.
 | `img-src 'self'; img-src https://…` | The browser keeps the first and ignores the second. |
 | `script_src 'self'` | Not a directive name. The whole segment is discarded, so scripts are unrestricted. |
 
+One field is handled the other way round. `Strict-Transport-Security:
+max-age=31536000; max-age=0` has no single reading: RFC 6797 §6.1 allows each
+directive once and tells a browser to ignore a field that breaks that rule, so a
+conforming one has no HSTS policy on that route at all while a lenient one keeps
+`max-age=31536000`. This build does not pick between them — the field is
+undecided, the run is `incomplete`, and it exits 2 rather than reporting a
+duration it cannot know is in force.
+
 Source-list analysis runs only on directives that take a source list, so
 `sandbox`, `report-uri` and `upgrade-insecure-requests` are never misread as
 allow-lists. A false finding in a security report costs more than a missing one.

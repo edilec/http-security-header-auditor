@@ -167,6 +167,13 @@ do, not guesses about what an author intended.
 | The same source listed twice | `csp-source-duplicate` | Nothing. The repeat allows nothing extra. |
 | A segment whose first token is not a directive name | `csp-directive-malformed` | The browser discards the whole segment, so whatever it restricted is unrestricted. |
 
+One field is handled the other way round, because the specification does not say
+what a browser does:
+
+| Contradiction | Rule | Why there is no verdict |
+| --- | --- | --- |
+| The same `Strict-Transport-Security` directive declared twice | `hsts-directive-duplicate` | RFC 6797 section 6.1 allows each directive once and tells a UA to ignore any STS field that breaks the syntax. A conforming browser therefore has **no** HSTS policy on that route; a lenient parser keeps the first occurrence and has a long one. `max-age=31536000; max-age=0` is the pair that matters. This build does not pick between the two readings, so the field is left undecided, the run is `incomplete`, and it exits 2. Crediting the first occurrence — which this build used to do — reported `pass` and exit 0 for a route whose transport security depends on whose parser you ask. |
+
 Source-list analysis runs **only** on directives that take a source list.
 `sandbox` takes sandboxing flags, `report-uri` takes URIs,
 `require-trusted-types-for` takes `'script'`, and `upgrade-insecure-requests`
@@ -206,7 +213,7 @@ costs more than a missing one.
 | `header-value-control-character` | error | no |
 | `header-value-too-long` | error | no |
 | `header-value-unexpected` | error | yes |
-| `hsts-directive-duplicate` | warning | yes |
+| `hsts-directive-duplicate` | error | no |
 | `hsts-directive-unknown` | warning | yes |
 | `hsts-include-subdomains-missing` | error | yes |
 | `hsts-max-age-malformed` | error | yes |
@@ -248,7 +255,7 @@ interchangeable with `pass`, and it exits 2.
   `exception-reason-missing`, `exception-expiry-missing`.
 - Anything that left a field undecided: `header-duplicated`,
   `header-value-too-long`, `header-value-control-character`, `csp-unparseable`,
-  `csp-analysis-incomplete`.
+  `csp-analysis-incomplete`, `hsts-directive-duplicate`.
 - `exception-expiry-undecidable`, because no expiry could be compared.
 - `time-budget-exceeded`, and more precisely the count of route rows that exist
   compared against the number of routes that compiled.

@@ -416,17 +416,17 @@ test('header-value-unexpected prints ERROR and counts one error', async () => {
   assert.equal(stderr.includes('ERROR   capture.json/routes/0/headers/0/value header-value-unexpected'), true)
 })
 
-test('hsts-directive-duplicate prints WARNING and counts no error', async () => {
+test('hsts-directive-duplicate prints ERROR and leaves the field undecided', async () => {
   const { code, report, stderr } = await audit({
     'policy.json': policy({ required: [REQUIRE_HSTS] }),
     'capture.json': capture([hstsRoute('twice', 'max-age=600; max-age=700')]),
   })
 
-  assert.equal(report.summary.errors, 0)
-  assert.equal(report.summary.warnings, 1)
-  assert.equal(report.status, 'pass')
-  assert.equal(code, 0)
-  assert.equal(stderr.includes('WARNING capture.json/routes/0/headers/0/value hsts-directive-duplicate'), true)
+  assert.equal(report.summary.warnings, 0)
+  assert.equal(report.status, 'incomplete')
+  assert.equal(report.routes[0].undecided.includes('strict-transport-security'), true)
+  assert.equal(code, 2)
+  assert.equal(stderr.includes('ERROR   capture.json/routes/0/headers/0/value hsts-directive-duplicate'), true)
 })
 
 test('hsts-directive-unknown prints WARNING and counts no error', async () => {

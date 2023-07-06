@@ -141,7 +141,8 @@ function hstsIssueFinding(issue, route, entry, file) {
       file,
       pointer: where,
       ruleId: 'hsts-directive-duplicate',
-      message: `On route "${id}", the Strict-Transport-Security field declares "${issue.directive}" more than once; the repeat was ignored.`,
+      message: `On route "${id}", the Strict-Transport-Security field declares "${issue.directive}" more than once. RFC 6797 allows each directive once and tells a browser to ignore a field that breaks that rule, so a conforming browser has no HSTS policy here at all while a lenient one keeps the first value; this build does not pick between them, so nothing about this field was decided.`,
+      suggestion: 'Send the field once, with one max-age.',
     }
   }
   if (issue.kind === 'hsts-directive-unknown') {
@@ -359,8 +360,27 @@ function evaluateRoute(context, route) {
   let hsts = null
   if (hstsEntries !== undefined && !undecided.has(HSTS_HEADER)) {
     const result = parseHsts(hstsEntries[0].value)
-    hsts = { parsed: result.parsed, malformed: result.issues.some((issue) => issue.kind === 'hsts-max-age-malformed') }
     for (const issue of result.issues) push(HSTS_HEADER, hstsIssueFinding(issue, route, hstsEntries[0], files.capture))
+    /**
+     * A repeated directive leaves the field with no single reading, so nothing
+     * about it is decided.
+     *
+     * RFC 6797 section 6.1 says all directives MUST appear only once in an STS
+     * field, and that a UA MUST ignore any STS field that does not conform to
+     * that syntax. A conforming browser therefore has no HSTS policy in force
+     * on this route at all; a lenient parser keeps the first occurrence and has
+     * a very different one. `max-age=31536000; max-age=0` is the pair that
+     * matters, and this build cannot tell which browser is reading it.
+     *
+     * Crediting the first occurrence -- which is what this did -- reported
+     * `pass` and exit 0 for a route whose transport security depends on whose
+     * parser you ask. The CSP case is not the same and stays an error: there a
+     * duplicated directive is defined to be ignored, so the browser's reading
+     * is known and a verdict is available. Here it is not, so the field is
+     * undecided, the run is incomplete, and it exits 2.
+     */
+    if (result.issues.some((issue) => issue.kind === 'hsts-directive-duplicate')) undecided.add(HSTS_HEADER)
+    else hsts = { parsed: result.parsed, malformed: result.issues.some((issue) => issue.kind === 'hsts-max-age-malformed') }
   }
 
   for (const entry of policy.forbidden) {

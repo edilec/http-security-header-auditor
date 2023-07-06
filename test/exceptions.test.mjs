@@ -195,6 +195,40 @@ test('a waiver cannot excuse a field that was captured twice', async () => {
   assert.deepEqual(routeRow(report, 'twice').undecided, ['content-security-policy'])
 })
 
+test('a waiver cannot excuse a Strict-Transport-Security field with no single reading', async () => {
+  // RFC 6797 section 6.1 allows each directive once and tells a browser to
+  // ignore a field that breaks that rule, so a conforming browser has no HSTS
+  // policy here at all while a lenient one honours max-age=31536000. This build
+  // does not pick, and a waiver saying "we accept this route as it is" cannot
+  // make an unanswered question answered.
+  const { code, report } = await cliReport(fixture(
+    {
+      required: [requirement('strict-transport-security', { minMaxAge: 31536000 })],
+      exceptions: [exception('twice', 'strict-transport-security', 'We accept this route as it is.', '2099-12-31')],
+    },
+    [route('twice', [header('Strict-Transport-Security', 'max-age=31536000; max-age=0')])],
+  ), ['--as-of', AS_OF])
+
+  assert.equal(report.status, 'incomplete')
+  assert.equal(code, 2)
+  assert.equal(report.summary.exceptionsApplied, 0)
+  assert.equal(raisedRules(report).includes('hsts-directive-duplicate'), true)
+  assert.equal(routeRow(report, 'twice').verdict, 'undecided')
+  assert.deepEqual(routeRow(report, 'twice').undecided, ['strict-transport-security'])
+})
+
+test('a Strict-Transport-Security field with one of each directive still passes', async () => {
+  // The other half: refusing every HSTS field would be a different defect.
+  const { code, report } = await cliReport(fixture(
+    { required: [requirement('strict-transport-security', { minMaxAge: 31536000, requireIncludeSubDomains: true })] },
+    [route('once', [header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')])],
+  ), ['--as-of', AS_OF])
+
+  assert.equal(report.status, 'pass')
+  assert.equal(code, 0)
+  assert.deepEqual(routeRow(report, 'once').undecided, [])
+})
+
 test('a waiver cannot excuse a value this build refused to parse', async () => {
   const { code, report } = await cliReport(fixture(
     {

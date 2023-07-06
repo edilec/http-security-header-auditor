@@ -275,16 +275,23 @@ test('csp-wildcard-shadows-sources exits 0', async () => {
   assert.equal(code, 0)
 })
 
-test('hsts-directive-duplicate exits 0', async () => {
+test('hsts-directive-duplicate exits 2, because the field has no single reading', async () => {
   const { code, report } = await audit(
-    { schemaVersion: '1', required: [{ header: 'strict-transport-security' }] },
-    { schemaVersion: '1', routes: [{ id: 'twice', headers: [{ name: 'Strict-Transport-Security', value: 'max-age=600; max-age=700' }] }] },
+    { schemaVersion: '1', required: [{ header: 'strict-transport-security', minMaxAge: 31536000 }] },
+    { schemaVersion: '1', routes: [{ id: 'twice', headers: [{ name: 'Strict-Transport-Security', value: 'max-age=31536000; max-age=0' }] }] },
   )
 
-  assert.equal(report.status, 'pass')
-  assert.equal(report.summary.errors, 0)
-  assert.equal(report.summary.warnings, 1)
-  assert.equal(code, 0)
+  // The pair that matters: crediting the first occurrence reports a satisfied
+  // minMaxAge on a field RFC 6797 tells a conforming browser to ignore whole.
+  assert.equal(report.status, 'incomplete')
+  assert.equal(report.summary.undecided, 1)
+  assert.equal(report.summary.checked, 0, 'the only pair there was is undecided, so nothing was decided')
+  assert.deepEqual(report.routes[0].undecided, ['strict-transport-security'])
+  assert.deepEqual(
+    report.findings.map((finding) => `${finding.severity} ${finding.ruleId}`).sort(),
+    ['error hsts-directive-duplicate', 'error no-checks-performed'],
+  )
+  assert.equal(code, 2)
 })
 
 test('hsts-directive-unknown exits 0', async () => {
