@@ -25,8 +25,33 @@ recorded here.
 - Route exceptions with a mandatory reason and a mandatory expiry, compared
   against an injected `--as-of` date. Without one, no waiver is applied and the
   run is `incomplete`.
-- Ten enforced limits, each reported by name when reached.
+- Ten enforced limits, each reported by name when reached. `maxFindings` bounds
+  the run and not only the printed array: findings past it are discarded as they
+  are raised and counted into `too-many-findings`, so the memory a run needs is
+  bounded by the limit rather than by what the documents could raise.
+- A cap of 5,000,000 on `maxRoutes` multiplied by `maxRequirements`. Those two
+  limits each bound one dimension; the size of a report is their product,
+  because every route row lists the required fields that route was missing. At
+  the published caps that product is forty million entries and `JSON.stringify`
+  refuses the report. A pair above the cap is refused in `validateLimits`,
+  before any file is opened, with an empty stdout and exit 2.
 - Examples that exit 0, 1 and 2.
+
+### Changed
+
+- `hsts-directive-duplicate` is now an `error`, it is no longer waivable, and it
+  leaves the field undecided so the run is `incomplete` and exits 2. It was a
+  `warning`, the first occurrence of the repeated directive was credited toward
+  the requirement, and a route sending
+  `Strict-Transport-Security: max-age=31536000; max-age=0` therefore reported
+  `pass` with exit 0. RFC 6797 section 6.1 allows each directive once and tells a
+  UA to ignore any STS field that breaks that syntax, so a conforming browser has
+  no HSTS policy on that route while a lenient one has a long one; nothing in a
+  capture says which browser is reading it, so there is no verdict to give.
+- The determinism claim is qualified. Two runs over identical inputs produce
+  byte-identical stdout unless `maxRuntimeMs` fires, because how many routes a
+  run reaches before the budget trips depends on the machine. A run that trips it
+  is `incomplete` with exit 2 every time, whatever it reached.
 
 ### Security
 
@@ -43,9 +68,17 @@ recorded here.
   nothing but a credential was reproduced in full on stdout -- the one string
   reaching output that stripping and bounding could not contain, since `excerpt`
   cuts from the end and the quoted span is at the front. The finding now carries
-  the position, line, column and offending token and never the text at them, and
-  `test/parse-failure-redaction.test.mjs` drives the published placeholder
-  through the real binary and asserts it absent from stdout, from stderr and
-  from every prefix down to eight characters.
+  the position, line and column and never the text at them.
+  `parseFailureDetail` recognises the quoting shape *before* it looks for the
+  offset, which is the part that matters: a capture whose own text reads
+  `at position 1` makes V8 quote that text back, so an offset-first reading
+  finds the offset inside the quoted span and slices the file's own text out as
+  if it were V8's prose. A closing guard then discards any detail still holding
+  a double quote, which is what makes the function safe against wordings this
+  build has never seen. `test/parse-failure-redaction.test.mjs` drives the
+  published placeholder through the real binary and asserts it absent from
+  stdout, from stderr and from every prefix down to eight characters, and covers
+  the `at position 1` document, a quoted span straddling a line break, and an
+  unseen wording that quotes its snippet before its offset.
 
 No release has been published.
