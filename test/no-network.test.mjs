@@ -6,15 +6,11 @@
  * so it is checked four ways, because each of them can be true while the
  * property is false:
  *
- * 1. A module resolution hook that refuses every network builtin, with the
- *    binary run under it over a real capture. If any code path reached for a
- *    socket, the import would fail and the run would not produce a report. A
- *    control run proves the hook actually fires, because a guard that never
- *    fires proves nothing.
- * 2. A live loopback listener whose address is planted in the input, which then
- *    records that nothing ever knocked. Input content is data: a URL in a CSP
- *    source, a report endpoint, a route description -- none of them is an
- *    instruction to fetch anything.
+ * 1. A module resolution hook and runtime API guards refuse network access
+ *    before the binary loads. Safe import, data-URL fetch and null-receiver
+ *    connect controls prove each guard fires without opening a socket.
+ * 2. Inert URL-shaped CSP, report and route data run through the real binary
+ *    under the guard. Input content is never an instruction to fetch it.
  * 3. A scan of the shipped source for the globals and spellings a hook cannot
  *    see: `fetch`, `eval`, a child process that would open a socket on this
  *    package's behalf, and anything that would read a credential.
@@ -25,7 +21,6 @@
 
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { createServer } from 'node:http'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,7 +47,32 @@ export async function resolve(specifier, context, next) {
 `
 
 const GUARD_SOURCE = `
-import { register } from 'node:module'
+import { register, syncBuiltinESMExports } from 'node:module'
+import net from 'node:net'
+import http from 'node:http'
+import https from 'node:https'
+import http2 from 'node:http2'
+import tls from 'node:tls'
+import dgram from 'node:dgram'
+import dns from 'node:dns'
+const forbidden = () => { throw new Error('BLOCKED_NETWORK_OPERATION') }
+net.Socket.prototype.connect = forbidden
+net.Server.prototype.listen = forbidden
+net.connect = forbidden
+net.createConnection = forbidden
+http.request = forbidden
+http.get = forbidden
+https.request = forbidden
+https.get = forbidden
+http2.connect = forbidden
+tls.connect = forbidden
+dgram.Socket.prototype.bind = forbidden
+dgram.Socket.prototype.send = forbidden
+dns.lookup = forbidden
+dns.resolve = forbidden
+globalThis.fetch = forbidden
+globalThis.WebSocket = forbidden
+syncBuiltinESMExports()
 register('./hook.mjs', import.meta.url)
 `
 
@@ -60,6 +80,9 @@ const PROBE_SOURCE = `
 import net from 'node:net'
 process.stdout.write(typeof net)
 `
+
+const FETCH_PROBE_SOURCE = `await fetch('data:text/plain,offline')`
+const CONNECT_PROBE_SOURCE = `process.getBuiltinModule('node:net').Socket.prototype.connect.call(null)`
 
 const POLICY = {
   schemaVersion: '1',
@@ -72,19 +95,29 @@ async function withGuard(body) {
     await writeFile(join(directory, 'hook.mjs'), HOOK_SOURCE)
     await writeFile(join(directory, 'guard.mjs'), GUARD_SOURCE)
     await writeFile(join(directory, 'probe.mjs'), PROBE_SOURCE)
+    await writeFile(join(directory, 'fetch-probe.mjs'), FETCH_PROBE_SOURCE)
+    await writeFile(join(directory, 'connect-probe.mjs'), CONNECT_PROBE_SOURCE)
     return await body({ directory, guard: pathToFileURL(join(directory, 'guard.mjs')).href })
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
 }
 
-test('the binary completes a real run with every network builtin refused at resolution', async () => {
+test('the binary completes a real run with network imports and APIs disabled', async () => {
   await withGuard(async ({ directory, guard }) => {
     // The control first: a script that does reach for a socket must fail under
     // the same guard, or this case would pass on a hook that never fires.
     await assert.rejects(
       () => execFileAsync(process.execPath, ['--import', guard, join(directory, 'probe.mjs')]),
       /BLOCKED_NETWORK_IMPORT:node:net/,
+    )
+    await assert.rejects(
+      () => execFileAsync(process.execPath, ['--import', guard, join(directory, 'fetch-probe.mjs')]),
+      /BLOCKED_NETWORK_OPERATION/,
+    )
+    await assert.rejects(
+      () => execFileAsync(process.execPath, ['--import', guard, join(directory, 'connect-probe.mjs')]),
+      /BLOCKED_NETWORK_OPERATION/,
     )
 
     const { stdout } = await withRoot({
@@ -101,21 +134,10 @@ test('the binary completes a real run with every network builtin refused at reso
   })
 })
 
-test('a live loopback address planted throughout the input is never contacted', async () => {
-  const seen = { connections: 0, requests: 0 }
-  const server = createServer((request, response) => {
-    seen.requests += 1
-    response.end('{}')
-  })
-  server.on('connection', () => {
-    seen.connections += 1
-  })
-  await new Promise((done) => server.listen(0, '127.0.0.1', done))
-  const { port } = server.address()
-  const origin = `http://127.0.0.1:${port}`
-
-  try {
-    const report = await apiReport({
+test('inert URL-shaped policy and capture evidence remain data under the network guard', async () => {
+  await withGuard(async ({ guard }) => {
+    const origin = 'http://127.0.0.1:8080'
+    const documents = {
       'policy.json': {
         schemaVersion: '1',
         label: `baseline for ${origin}`,
@@ -130,13 +152,13 @@ test('a live loopback address planted throughout the input is never contacted', 
           `GET ${origin}/`,
         )],
       },
-    })
-
+    }
+    const { stdout } = await withRoot(documents, (root) =>
+      execFileAsync(process.execPath, ['--import', guard, CLI, '--root', root, '--json']))
+    const report = JSON.parse(stdout)
     assert.equal(report.status, 'pass')
-    assert.deepEqual(seen, { connections: 0, requests: 0 }, 'the listener on that exact port saw nothing at all')
-  } finally {
-    await new Promise((done) => server.close(done))
-  }
+    assert.equal(report.summary.checked, 1)
+  })
 })
 
 async function shippedSource() {

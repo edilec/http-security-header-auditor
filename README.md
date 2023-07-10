@@ -170,13 +170,12 @@ a build over.
 
 - **No network, ever.** No fetch, no host resolution, **no endpoint discovery**,
   no port scan, no request of any kind. `test/no-network.test.mjs` proves it four
-  ways: the binary completes a real run with every network builtin refused at
-  module resolution (with a control run proving the guard fires); a live loopback
-  listener whose address is planted through the policy label, the route
-  description and a CSP `report-uri` records that nothing ever knocked; the
-  shipped source is scanned for `fetch`, `eval`, `new URL`, child processes and
-  credential reads; and the input schema is checked for having nowhere to put an
-  address at all.
+  ways: the binary completes real runs under import and socket/API guards,
+  with safe probes proving import, local `data:` fetch and null-receiver connect
+  denial; inert URL-shaped evidence in the policy label, route description and
+  CSP `report-uri` is reported without a listener; shipped source is scanned
+  for `fetch`, `eval`, `new URL`, child processes and credential reads; and the
+  input schema is checked for having nowhere to put an address at all.
 - **No probing, no exploitation, no bypass.** This tool does not try a header
   against a browser, construct a payload, or test whether a policy can be evaded.
   It reads two files and compares them.
