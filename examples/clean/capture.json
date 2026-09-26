@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1",
+  "label": "staging capture, exported by hand",
+  "routes": [
+    {
+      "id": "app-root",
+      "description": "Document response for the signed-in shell.",
+      "headers": [
+        { "name": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; script-src 'self'" },
+        { "name": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
+        { "name": "X-Content-Type-Options", "value": "nosniff" },
+        { "name": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "id": "api/v1/orders",
+      "description": "JSON collection response.",
+      "headers": [
+        { "name": "content-security-policy", "value": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'" },
+        { "name": "strict-transport-security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "name": "x-content-type-options", "value": "nosniff" },
+        { "name": "referrer-policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "id": "legacy-report-viewer",
+      "description": "Old reporting UI, mid CSP rollout.",
+      "headers": [
+        { "name": "Content-Security-Policy-Report-Only", "value": "default-src 'self'; report-uri /csp-reports" },
+        { "name": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "name": "X-Content-Type-Options", "value": "nosniff" },
+        { "name": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    }
+  ]
+}

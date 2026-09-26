@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1",
+  "label": "capture with evidence this build will not guess at",
+  "routes": [
+    {
+      "id": "captured-twice",
+      "description": "The exporter recorded the field twice with two different values.",
+      "headers": [
+        { "name": "Content-Security-Policy", "value": "default-src 'self'" },
+        { "name": "content-security-policy", "value": "default-src *" },
+        { "name": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "id": "unknown-directive",
+      "description": "The policy uses a directive this build does not analyse.",
+      "headers": [
+        { "name": "Content-Security-Policy", "value": "default-src 'self'; sourceless-future-directive https://cdn.example.invalid" },
+        { "name": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ]
+}

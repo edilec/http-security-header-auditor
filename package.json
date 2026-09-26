@@ -1,0 +1,52 @@
+{
+  "name": "http-security-header-auditor",
+  "version": "0.1.0",
+  "description": "Evaluate captured HTTP response header fields against a declared policy and route exceptions, and explain missing or contradictory directives offline.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "node --check src/index.mjs && node --check src/text.mjs && node --check src/rules.mjs && node --check src/directives.mjs && node --check src/documents.mjs && node --check src/evaluate.mjs && node --check bin/http-security-header-auditor.mjs && node --check test/support.mjs && node --check test/text.test.mjs && node --check test/directives.test.mjs && node --check test/documents.test.mjs && node --check test/evaluate.test.mjs && node --check test/report-only.test.mjs && node --check test/exceptions.test.mjs && node --check test/limits.test.mjs && node --check test/confinement.test.mjs && node --check test/sanitisation.test.mjs && node --check test/parse-failure-redaction.test.mjs && node --check test/ordering.test.mjs && node --check test/ordering-equivalence.test.mjs && node --check test/severity-table.test.mjs && node --check test/severity-exit.test.mjs && node --check test/severity-word.test.mjs && node --check test/incomplete.test.mjs && node --check test/finding-contract.test.mjs && node --check test/cli.test.mjs && node --check test/examples.test.mjs && node --check test/no-network.test.mjs && node --check test/offline-test-policy.test.mjs",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=src/**",
+    "example": "node bin/http-security-header-auditor.mjs --root examples/clean --as-of 2026-03-01",
+    "pack:check": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run example && npm run pack:check"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edilec/http-security-header-auditor.git"
+  },
+  "bin": {
+    "http-security-header-auditor": "./bin/http-security-header-auditor.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "http-headers",
+    "security-headers",
+    "content-security-policy",
+    "hsts",
+    "policy",
+    "audit",
+    "offline",
+    "cli"
+  ],
+  "author": "Edilec Private Limited",
+  "bugs": {
+    "url": "https://github.com/edilec/http-security-header-auditor/issues"
+  },
+  "homepage": "https://github.com/edilec/http-security-header-auditor#readme"
+}
