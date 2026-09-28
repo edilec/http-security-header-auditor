@@ -38,22 +38,28 @@ INFO    policy.json/exceptions/0 exception-applied On route "legacy-report-viewe
 stdout carries the JSON report and nothing else, so it pipes straight into a
 parser. The human summary above goes to stderr, and `--json` suppresses it.
 
-## Install and run
+## Run from the source checkout
+
+This is a GitHub source release; the package is not published on npm. Use the
+checked-in CLI directly with Node.js 22 or newer:
 
 ```console
-$ npx http-security-header-auditor --root ./headers --as-of 2026-03-01
-$ npx http-security-header-auditor --root ./headers --as-of 2026-03-01 --json | jq '.summary'
-$ npx http-security-header-auditor --help
+$ git clone https://github.com/edilec/http-security-header-auditor.git
+$ cd http-security-header-auditor
+$ node bin/http-security-header-auditor.mjs --root examples/clean --as-of 2026-03-01
+$ node bin/http-security-header-auditor.mjs --help
 ```
+
+Replace `examples/clean` with the path to your own saved capture and policy.
 
 `--root` holds two files: `policy.json` and `capture.json`. Rename either with
 `--policy` and `--capture`; both stay relative to the root, and a path that
 resolves outside it — through a symbolic link included — is refused unread.
 
-As a library:
+From the source checkout, as a library:
 
 ```js
-import { auditHeaders, exitCodeFor } from 'http-security-header-auditor'
+import { auditHeaders, exitCodeFor } from './src/index.mjs'
 
 const report = await auditHeaders({ root: './headers', asOf: '2026-03-01' })
 process.exitCode = exitCodeFor(report)
