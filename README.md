@@ -4,6 +4,12 @@ Evaluate captured HTTP response header fields against a declared policy and its
 route exceptions, and explain what is missing and what contradicts itself —
 entirely offline.
 
+For production policy choices and rollout, see Edilec's [Security Headers and
+Browser Controls guide](https://edilec.com/blog/sec-9009/security-headers-and-browser-controls/).
+This checker evaluates a saved capture against a policy you supply; the guide
+covers choosing and staging that policy. Edilec maintains this tool, and this
+note was prepared with AI assistance.
+
 - **Repository:** [edilec/http-security-header-auditor](https://github.com/edilec/http-security-header-auditor)
 - **Area:** Security & Privacy
 - **License:** MIT
