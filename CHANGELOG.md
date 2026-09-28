@@ -10,6 +10,8 @@ recorded here.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-29
+
 ### Added
 
 - `auditHeaders()` and the `http-security-header-auditor` binary: evaluate a
@@ -80,5 +82,3 @@ recorded here.
   stdout, from stderr and from every prefix down to eight characters, and covers
   the `at position 1` document, a quoted span straddling a line break, and an
   unseen wording that quotes its snippet before its offset.
-
-No release has been published.
